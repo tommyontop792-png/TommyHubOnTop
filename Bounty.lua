@@ -2178,8 +2178,8 @@ else
     vu589.Size = UDim2.new(1, - 20, 0, 40)
     vu589.Position = UDim2.new(0, 10, 0, 10)
     vu589.PlaceholderText = "enter password..."
-    vu589.ClearTextOnFocus = false
-    vu589.Text = ""
+    vu589.ClearTextOnFocus = true
+    vu589.Text = "tommy"
     vu589.TextColor3 = Color3.new(1, 1, 1)
     vu589.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     vu589.Font = Enum.Font.Gotham
@@ -2204,7 +2204,7 @@ else
     vu591.TextXAlignment = Enum.TextXAlignment.Center
     local function vu592()
         if vu589.Text ~= vu7 then
-            vu591.Text = "not valid"
+            vu591.Text = "valid"
         else
             vu587:Destroy()
             vu586()
