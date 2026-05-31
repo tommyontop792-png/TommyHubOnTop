@@ -13,16 +13,16 @@ local VIM               = game:GetService("VirtualInputManager")
 -- ══════════════════════════════════════════════
 --  CONFIGURACIÓN DE CAZA (PVP AGRESIVO)
 -- ══════════════════════════════════════════════
-local SELECTED_TEAM         = "Pirates"     -- Equipo al que te unirá
-local MIN_PLAYER_LEVEL      = 2300          -- Nivel mínimo del rival para dar recompensa
-local PREDICTION_TIME       = 0.20          -- Tiempo de predicción de TP (más bajo = más pegado al rival)
+local SELECTED_TEAM         = "Pirates"     
+local MIN_PLAYER_LEVEL      = 2300          
+local PREDICTION_TIME       = 0.18          -- Ajustado para máxima cercanía
 local PREDICTION_SAMPLES    = 3
-local YOffset               = -2            -- Altura respecto al rival (-2 te pone ligeramente debajo/detrás)
-local LOW_HEALTH_THRESHOLD  = 3500          -- Vida para escapar si estás muriendo
-local SAFE_HEALTH_THRESHOLD = 8500          -- Vida para regresar al combate tras escapar
-local ESCAPE_HEIGHT         = 15000         -- Altura del TP de escape celular
-local ATTACK_RATE           = 0.05          -- Velocidad de clics del T-Rex (Muy rápido)
-local NO_TARGET_HOP_TIME    = 8             -- Segundos sin jugadores válidos antes de cambiar de server
+local YOffset               = -1.5          -- Te posiciona perfecto para los clics del T-Rex
+local LOW_HEALTH_THRESHOLD  = 3500          
+local SAFE_HEALTH_THRESHOLD = 8500          
+local ESCAPE_HEIGHT         = 15000         
+local ATTACK_RATE           = 0.05          -- Clics ultra rápidos
+local NO_TARGET_HOP_TIME    = 8             
 
 -- ══════════════════════════════════════════════
 --  ESTADO DEL SCRIPT
@@ -71,6 +71,12 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes", 15)
 local CommF_  = Remotes and Remotes:WaitForChild("CommF_", 10)
 local CommE_  = Remotes and Remotes:WaitForChild("CommE",  10)
 
+-- Net Modules para forzar el registro de daño
+local Modules = ReplicatedStorage:WaitForChild("Modules", 5)
+local Net = Modules and Modules:WaitForChild("Net", 5)
+local RegHit = Net and Net:FindFirstChild("RE/RegisterHit")
+local RegAttack = Net and Net:FindFirstChild("RE/RegisterAttack")
+
 -- ══════════════════════════════════════════════
 --  DETECTOR DE BAJAS (KILLS)
 -- ══════════════════════════════════════════════
@@ -91,7 +97,7 @@ end
 task.spawn(SetupKillDetection)
 
 -- ══════════════════════════════════════════════
---  SERVER HOP (SISTEMA ANTI-SERVIDORES VACÍOS)
+--  SERVER HOP
 -- ══════════════════════════════════════════════
 local function Hop()
     if _isHopping then return false end
@@ -129,25 +135,6 @@ local function Hop()
             pcall(function() browser:InvokeServer("teleport", chosen.uuid) end)
         end
     end
-
-    -- Alternativa mediante API HTTP si falla el ServerBrowser interno
-    local apiServers = {}
-    pcall(function()
-        local r = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. _place .. "/servers/Public?sortOrder=Desc&limit=100"))
-        if r and r.data then
-            for _, sv in ipairs(r.data) do
-                if sv.id and sv.id ~= _id and sv.playing and sv.maxPlayers and sv.playing >= 3 and sv.playing < sv.maxPlayers then
-                    table.insert(apiServers, sv)
-                end
-            end
-        end
-    end)
-
-    if #apiServers > 0 then
-        local chosen = apiServers[math.random(1, math.min(5, #apiServers))]
-        pcall(function() TeleportService:TeleportToPlaceInstance(_place, chosen.id, lp) end)
-    end
-
     _isHopping   = false
     return false
 end
@@ -159,13 +146,6 @@ local function selectFaction(faction)
     pcall(function()
         local activity = nil
         if Remotes then activity = Remotes:FindFirstChild("RE/OnEventServiceActivity") end
-        if not activity then
-            for _, v in pairs(ReplicatedStorage:GetDescendants()) do
-                if v:IsA("RemoteEvent") and v.Name == "RE/OnEventServiceActivity" then
-                    activity = v; break
-                end
-            end
-        end
         if activity then activity:FireServer("TeamSelect/Team/" .. faction) end
         task.wait(0.05)
         if CommF_ then CommF_:InvokeServer("SetTeam", faction) end
@@ -234,10 +214,7 @@ local function IsPlayerValid(p)
     if p == lp or not p.Character then return false end
     local h = p.Character:FindFirstChild("Humanoid")
     if not h or h.Health <= 0 then return false end
-    
-    -- No atacar a aliados si eres Marine
     if lp.Team and p.Team and lp.Team.Name == "Marines" and p.Team == lp.Team then return false end
-    
     if p:GetAttribute("pvpDisabled") == true  then return false end
     if p:GetAttribute("IslandRaiding") == true then return false end
     if GetPlayerLevel(p) < MIN_PLAYER_LEVEL    then return false end
@@ -278,32 +255,20 @@ local function v4()
         local rf = aw:FindFirstChild("RemoteFunction"); if not rf then return end
         rf:InvokeServer(true)
     end)
-    pcall(function()
-        VIM:SendKeyEvent(true,  Enum.KeyCode.T, false, game)
-        task.wait(0.02)
-        VIM:SendKeyEvent(false, Enum.KeyCode.T, false, game)
-    end)
 end
 
 -- ══════════════════════════════════════════════
---  ATAQUE CON T-REX EXCLUSIVO CONTRA JUGADORES
+--  SISTEMA DE DAÑO EFECTIVO CON CLICS DE T-REX
 -- ══════════════════════════════════════════════
 local TRexName = "T-Rex-T-Rex"
 
 function StartAttackLoop()
     if Conns.attack then task.cancel(Conns.attack); Conns.attack = nil end
 
-    -- Forzar clic inicial para activar hitboxes de Roblox
-    pcall(function()
-        VIM:SendMouseButtonEvent(0, 0, 0, true,  game, 1)
-        task.wait(0.02)
-        VIM:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    end)
-
-    -- Auto-Equipador de la Fruta T-Rex
+    -- Bucle alterno para equipar la fruta si se desequipa sola
     local equipConn = task.spawn(function()
         while AutoBountyEnabled do
-            task.wait(0.1)
+            task.wait(0.2)
             pcall(function()
                 local c = lp.Character; if not c then return end
                 if c:FindFirstChild(TRexName) then return end
@@ -315,7 +280,7 @@ function StartAttackLoop()
         end
     end)
 
-    -- Bucle de clics/remotos directo al jugador objetivo
+    -- Ejecución del ataque e inyección de daño por clic
     Conns.attack = task.spawn(function()
         local moveIndex = 1
         while AutoBountyEnabled do
@@ -328,17 +293,36 @@ function StartAttackLoop()
             pcall(function()
                 local myChar = lp.Character; if not myChar then return end
                 local myHRP  = myChar:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
-                if not CurrentTarget.Parent or not CurrentTarget.Character then return end
                 
-                local tHRP = CurrentTarget.Character:FindFirstChild("HumanoidRootPart"); if not tHRP then return end
-                local tHum = CurrentTarget.Character:FindFirstChild("Humanoid")
-                if not tHum or tHum.Health <= 0 then return end
+                local enemyChar = CurrentTarget.Character
+                if not enemyChar or not enemyChar.Parent then return end
                 
-                local tool = myChar:FindFirstChild(TRexName); if not tool then return end
-                local remote = tool:FindFirstChild("LeftClickRemote"); if not remote then return end
+                local tHRP = enemyChar:FindFirstChild("HumanoidRootPart")
+                local tHum = enemyChar:FindFirstChild("Humanoid")
+                if not tHRP or not tHum or tHum.Health <= 0 then return end
                 
-                local dir = (tHRP.Position - myHRP.Position).Unit
-                remote:FireServer(Vector3.new(dir.X, dir.Y, dir.Z), thisMove)
+                local tool = myChar:FindFirstChild(TRexName)
+                if not tool then return end
+                
+                -- 1. Forzar ejecución del click en el servidor de Blox Fruits
+                local remote = tool:FindFirstChild("LeftClickRemote") or tool:FindFirstChild("CombatFolder"):FindFirstChild("LeftClickRemote")
+                local lookDir = (tHRP.Position - myHRP.Position).Unit
+                if remote then
+                    remote:FireServer(lookDir, thisMove)
+                end
+                
+                -- 2. Simular clic de pantalla (Para activar animaciones locales de la fruta)
+                VIM:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                VIM:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+
+                -- 3. VALIDACIÓN DE DAÑO DIRECTO: Forzar el Hitbox de los colmillos del T-Rex
+                if RegAttack and RegHit then
+                    RegAttack:FireServer(0) -- Abre la ventana de ataque activo
+                    
+                    -- Registra el impacto directamente en la cabeza/cuerpo del enemigo
+                    local parts = {{enemyChar, enemyChar:FindFirstChild("Head") or tHRP}}
+                    RegHit:FireServer(enemyChar:FindFirstChild("Head") or tHRP, parts)
+                end
             end)
         end
         task.cancel(equipConn)
@@ -347,7 +331,7 @@ function StartAttackLoop()
 end
 
 -- ══════════════════════════════════════════════
---  INSTA TELEPORT HACIA EL JUGADOR OBJETIVO
+--  INSTA TELEPORT PREDICTIVO
 -- ══════════════════════════════════════════════
 function StartInstaTeleport()
     if Conns.instaTp then Conns.instaTp:Disconnect(); Conns.instaTp = nil end
@@ -374,7 +358,6 @@ function StartInstaTeleport()
                 table.remove(hist.timestamps, 1)
             end
 
-            -- Cálculo matemático de predicción de movimiento para evitar teletransporte desfasado
             local predicted = pos
             if #hist.positions >= 2 then
                 local totalDisp = Vector3.zero
@@ -393,7 +376,6 @@ function StartInstaTeleport()
             
             local myChar2 = lp.Character
             if myChar2 then
-                -- Te posiciona exactamente sobre la predicción del jugador objetivo mas el desfase Y Offset
                 myChar2:PivotTo(CFrame.new(predicted) * CFrame.new(0, YOffset, 0))
             end
         end)
@@ -401,7 +383,7 @@ function StartInstaTeleport()
 end
 
 -- ══════════════════════════════════════════════
---  SISTEMA DE ESCAPE DE EMERGENCIA
+--  ESCAPE DE EMERGENCIA
 -- ══════════════════════════════════════════════
 local function StartEscape()
     if EscapeActive then return end
@@ -426,7 +408,7 @@ local function StartEscape()
 end
 
 -- ══════════════════════════════════════════════
---  SELECCIÓN SISTEMÁTICA DE JUGADORES
+--  MANEJO COLA DE JUGADORES
 -- ══════════════════════════════════════════════
 local function DiscardTarget()
     CurrentTarget = nil
@@ -440,7 +422,6 @@ function PickNextTarget()
     DiscardTarget()
 
     local all = Players:GetPlayers()
-    -- Mezclar lista de jugadores de manera aleatoria
     for i = #all, 2, -1 do
         local j = math.random(1, i)
         all[i], all[j] = all[j], all[i]
@@ -527,18 +508,10 @@ local function StartAutoBounty()
     end)
 end
 
--- ══════════════════════════════════════════════
---  SISTEMA FAST ATTACK EXPLOSIVO
--- ══════════════════════════════════════════════
+-- Fast Attack global heredado
 local FastAttackConn = nil
 function StartFastAttack()
     if FastAttackConn then task.cancel(FastAttackConn); FastAttackConn = nil end
-    local Modules = ReplicatedStorage:WaitForChild("Modules", 5)
-    local Net = Modules and Modules:WaitForChild("Net", 5)
-    if not Net then return end
-    
-    local RegHit    = Net:FindFirstChild("RE/RegisterHit")
-    local RegAttack = Net:FindFirstChild("RE/RegisterAttack")
     if not RegHit or not RegAttack then return end
 
     FastAttackConn = task.spawn(function()
@@ -564,7 +537,7 @@ function StartFastAttack()
     end)
 end
 
--- Manejo de reapariciones tras morir
+-- Respawn Handler
 local function OnCharacterDeath()
     local wasEnabled = AutoBountyEnabled
     StopAll()
@@ -578,11 +551,10 @@ local function OnCharacterDeath()
 end
 if char:FindFirstChild("Humanoid") then char.Humanoid.Died:Once(OnCharacterDeath) end
 
--- Tareas asíncronas constantes en segundo plano
+-- Buffs continuos
 task.spawn(function() while task.wait(4) do pcall(BusoKen) end end)
 task.spawn(function() while task.wait(0.5) do pcall(PvpEnable); pcall(v4); pcall(antimover) end end)
 
--- Parcheador para eliminar temblores de cámara molestos
 pcall(function()
     local CS = require(ReplicatedStorage:WaitForChild("Util",12):WaitForChild("CameraShaker",10):WaitForChild("Main",10))
     CS.StartShake = function() end; CS.ShakeOnce = function() end
@@ -616,7 +588,7 @@ Header.BorderSizePixel = 0
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
 
 local Title = Instance.new("TextLabel", Header)
-Title.Text = "👑 Tommy Hub v7 | PVP AutoBounty"
+Title.Text = "👑 Tommy Hub v7 | Real T-Rex Damage"
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
@@ -687,27 +659,16 @@ local function CreateToggle(text, defaultState, callback)
     end)
 end
 
--- ══════════════════════════════════════════════
---  INTERRUPTORES DE LA INTERFAZ
--- ══════════════════════════════════════════════
-CreateToggle("⚔️ Auto Hunt Players (T-Rex Clicks)", AutoBountyEnabled, function(enabled)
-    if enabled then
-        StartAutoBounty()
-    else
-        StopAll()
-    end
+-- Toggles vinculados
+CreateToggle("🦖 Auto Bounty (Forzar Daño Clics)", AutoBountyEnabled, function(enabled)
+    if enabled then StartAutoBounty() else StopAll() end
 end)
 
 CreateToggle("⚡ Fast Attack (Explosive Hits)", FastAttackEnabled, function(enabled)
     FastAttackEnabled = enabled
-    if enabled then
-        StartFastAttack()
-    else
-        if FastAttackConn then task.cancel(FastAttackConn); FastAttackConn = nil end
-    end
+    if enabled then StartFastAttack() else if FastAttackConn then task.cancel(FastAttackConn); FastAttackConn = nil end end
 end)
 
--- Sistema de despliegue/ocultación de UI
 local UI_Open = true
 MinBtn.MouseButton1Click:Connect(function()
     UI_Open = not UI_Open
@@ -715,7 +676,6 @@ MinBtn.MouseButton1Click:Connect(function()
     Panel:TweenSize(UI_Open and UDim2.new(0, 290, 0, 240) or UDim2.new(0, 290, 0, 38), "Out", "Quad", 0.2, true)
 end)
 
--- Soporte total de Arrastre táctil (Mobile/Delta)
 local dragging, dragInput, dragStart, startPos
 Panel.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
