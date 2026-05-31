@@ -11,21 +11,21 @@ local CoreGui           = game:GetService("CoreGui")
 local VIM               = game:GetService("VirtualInputManager")
 
 -- ══════════════════════════════════════════════
---  CONFIG
+--  CONFIGURACIÓN DE CAZA (PVP AGRESIVO)
 -- ══════════════════════════════════════════════
-local SELECTED_TEAM         = "Pirates"
-local MIN_PLAYER_LEVEL      = 2300
-local PREDICTION_TIME       = 0.25
+local SELECTED_TEAM         = "Pirates"     -- Equipo al que te unirá
+local MIN_PLAYER_LEVEL      = 2300          -- Nivel mínimo del rival para dar recompensa
+local PREDICTION_TIME       = 0.20          -- Tiempo de predicción de TP (más bajo = más pegado al rival)
 local PREDICTION_SAMPLES    = 3
-local YOffset               = 1
-local LOW_HEALTH_THRESHOLD  = 5000
-local SAFE_HEALTH_THRESHOLD = 9000
-local ESCAPE_HEIGHT         = 273861
-local ATTACK_RATE           = 0.08
-local NO_TARGET_HOP_TIME    = 10   -- segundos sin target → server hop
+local YOffset               = -2            -- Altura respecto al rival (-2 te pone ligeramente debajo/detrás)
+local LOW_HEALTH_THRESHOLD  = 3500          -- Vida para escapar si estás muriendo
+local SAFE_HEALTH_THRESHOLD = 8500          -- Vida para regresar al combate tras escapar
+local ESCAPE_HEIGHT         = 15000         -- Altura del TP de escape celular
+local ATTACK_RATE           = 0.05          -- Velocidad de clics del T-Rex (Muy rápido)
+local NO_TARGET_HOP_TIME    = 8             -- Segundos sin jugadores válidos antes de cambiar de server
 
 -- ══════════════════════════════════════════════
---  ESTADO
+--  ESTADO DEL SCRIPT
 -- ══════════════════════════════════════════════
 local lp          = Players.LocalPlayer
 local ShuttingDown  = false
@@ -40,7 +40,7 @@ local Conns = {
 
 local CurrentTarget     = nil
 local AutoBountyEnabled = false
-local FastAttackEnabled = false -- Controlado por la UI ahora
+local FastAttackEnabled = false 
 local BackupThread      = nil
 local EscapeActive      = false  
 
@@ -55,9 +55,9 @@ local _place       = game.PlaceId
 local _id          = game.JobId
 local _isHopping   = false
 local _lastHopTime = -999
-local HOP_COOLDOWN = 8
+local HOP_COOLDOWN = 5
 
--- Forward declarations obligatorias en Lua
+-- Declaraciones adelantadas obligatorias en Lua
 local PickNextTarget
 local StartAttackLoop
 local StopAll
@@ -65,22 +65,22 @@ local StartFastAttack
 local StartInstaTeleport
 
 -- ══════════════════════════════════════════════
---  REMOTES
+--  REMOTES DE BLOX FRUITS
 -- ══════════════════════════════════════════════
 local Remotes = ReplicatedStorage:WaitForChild("Remotes", 15)
 local CommF_  = Remotes and Remotes:WaitForChild("CommF_", 10)
 local CommE_  = Remotes and Remotes:WaitForChild("CommE",  10)
 
 -- ══════════════════════════════════════════════
---  KILL DETECTION
+--  DETECTOR DE BAJAS (KILLS)
 -- ══════════════════════════════════════════════
 local function SetupKillDetection()
     if not CommE_ then return end
     CommE_.OnClientEvent:Connect(function(event, msg)
         if event ~= "Notify" then return end
         msg = tostring(msg or "")
-        if msg:find("Bounty") and msg:find("from") or msg:find("Honor") and msg:find("from") then
-            TotalKills += 1
+        if (msg:find("Bounty") and msg:find("from")) or (msg:find("Honor") and msg:find("from")) then
+            TotalKills = TotalKills + 1
             NoTargetSince = nil  
             if AutoBountyEnabled then
                 task.spawn(PickNextTarget)
@@ -88,9 +88,10 @@ local function SetupKillDetection()
         end
     end)
 end
+task.spawn(SetupKillDetection)
 
 -- ══════════════════════════════════════════════
---  SERVER HOP
+--  SERVER HOP (SISTEMA ANTI-SERVIDORES VACÍOS)
 -- ══════════════════════════════════════════════
 local function Hop()
     if _isHopping then return false end
@@ -100,17 +101,12 @@ local function Hop()
     _isHopping   = true
     _lastHopTime = now
 
-    task.delay(15, function()
-        _isHopping = false
-    end)
-
+    task.delay(15, function() _isHopping = false end)
     local browser = ReplicatedStorage:FindFirstChild("__ServerBrowser")
 
     if browser then
         local allServers = {}
-        local ok, result = pcall(function()
-            return browser:InvokeServer(1)
-        end)
+        local ok, result = pcall(function() return browser:InvokeServer(1) end)
         if ok and type(result) == "table" then
             for uuid, info in pairs(result) do
                 if type(info) == "table" and info.Count and uuid ~= _id then
@@ -122,7 +118,7 @@ local function Hop()
         if #allServers > 0 then
             local valid = {}
             for _, s in pairs(allServers) do
-                if s.count >= 3 and s.count <= 11 then
+                if s.count >= 4 and s.count <= 11 then
                     table.insert(valid, s)
                 end
             end
@@ -130,18 +126,14 @@ local function Hop()
             table.sort(valid, function(a, b) return a.count > b.count end)
             local chosen = valid[math.random(1, math.min(5, #valid))]
 
-            local hopOk, _ = pcall(function()
-                browser:InvokeServer("teleport", chosen.uuid)
-            end)
-            if hopOk then return true end
+            pcall(function() browser:InvokeServer("teleport", chosen.uuid) end)
         end
     end
 
+    -- Alternativa mediante API HTTP si falla el ServerBrowser interno
     local apiServers = {}
     pcall(function()
-        local r = HttpService:JSONDecode(
-            game:HttpGet("https://games.roblox.com/v1/games/" .. _place .. "/servers/Public?sortOrder=Desc&limit=100")
-        )
+        local r = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. _place .. "/servers/Public?sortOrder=Desc&limit=100"))
         if r and r.data then
             for _, sv in ipairs(r.data) do
                 if sv.id and sv.id ~= _id and sv.playing and sv.maxPlayers and sv.playing >= 3 and sv.playing < sv.maxPlayers then
@@ -153,26 +145,20 @@ local function Hop()
 
     if #apiServers > 0 then
         local chosen = apiServers[math.random(1, math.min(5, #apiServers))]
-        local ok, _ = pcall(function()
-            TeleportService:TeleportToPlaceInstance(_place, chosen.id, lp)
-        end)
-        if ok then return true end
+        pcall(function() TeleportService:TeleportToPlaceInstance(_place, chosen.id, lp) end)
     end
 
     _isHopping   = false
-    _lastHopTime = now - HOP_COOLDOWN + 3
     return false
 end
 
 -- ══════════════════════════════════════════════
---  SELECT FACTION
+--  AUTO SELECCIÓN DE EQUIPO
 -- ══════════════════════════════════════════════
 local function selectFaction(faction)
     pcall(function()
         local activity = nil
-        if Remotes then
-            activity = Remotes:FindFirstChild("RE/OnEventServiceActivity")
-        end
+        if Remotes then activity = Remotes:FindFirstChild("RE/OnEventServiceActivity") end
         if not activity then
             for _, v in pairs(ReplicatedStorage:GetDescendants()) do
                 if v:IsA("RemoteEvent") and v.Name == "RE/OnEventServiceActivity" then
@@ -188,15 +174,15 @@ end
 
 task.spawn(function()
     local elapsed = 0
-    while elapsed < 30 do
-        task.wait(0.8); elapsed += 0.8
+    while elapsed < 20 do
+        task.wait(0.5); elapsed = elapsed + 0.5
         selectFaction(SELECTED_TEAM)
         if lp.Team and lp.Team.Name == SELECTED_TEAM then break end
     end
 end)
 
 -- ══════════════════════════════════════════════
---  ESPERAR PERSONAJE Y ANTI-SEAT
+--  ESPERAR PERSONAJE Y ANTI ASENTARSE
 -- ══════════════════════════════════════════════
 local char = lp.Character or lp.CharacterAdded:Wait()
 char:WaitForChild("HumanoidRootPart", 10)
@@ -219,7 +205,7 @@ end
 StartAntiSeat()
 
 -- ══════════════════════════════════════════════
---  UTILIDADES DE VALIDACIÓN
+--  SISTEMA DE FILTRADO Y VALIDACIÓN DE JUGADORES
 -- ══════════════════════════════════════════════
 local function GetPlayerLevel(p)
     local d = p:FindFirstChild("Data"); if not d then return 0 end
@@ -248,17 +234,15 @@ local function IsPlayerValid(p)
     if p == lp or not p.Character then return false end
     local h = p.Character:FindFirstChild("Humanoid")
     if not h or h.Health <= 0 then return false end
+    
+    -- No atacar a aliados si eres Marine
     if lp.Team and p.Team and lp.Team.Name == "Marines" and p.Team == lp.Team then return false end
+    
     if p:GetAttribute("pvpDisabled") == true  then return false end
     if p:GetAttribute("IslandRaiding") == true then return false end
     if GetPlayerLevel(p) < MIN_PLAYER_LEVEL    then return false end
     if IsPlayerInSafeZone(p)                   then return false end
     return true
-end
-
-local function GetCurrentBounty()
-    local ls = lp:FindFirstChild("leaderstats"); if not ls then return 0 end
-    local b  = ls:FindFirstChild("Bounty/Honor"); return b and (tonumber(b.Value) or 0) or 0
 end
 
 local function IsHealthLow()
@@ -268,15 +252,13 @@ local function IsHealthLow()
 end
 
 -- ══════════════════════════════════════════════
---  BUFFS / MEJORAS AUTOMÁTICAS
+--  AUTO MEJORAS DE COMBATE (HAKI, PVP, V4)
 -- ══════════════════════════════════════════════
 local function BusoKen()
     pcall(function() if CommE_ then CommE_:FireServer("Ken", true) end end)
     pcall(function()
         local c = lp.Character
-        if c and not c:FindFirstChild("HasBuso") and CommF_ then
-            CommF_:InvokeServer("Buso")
-        end
+        if c and not c:FindFirstChild("HasBuso") and CommF_ then CommF_:InvokeServer("Buso") end
     end)
 end
 
@@ -286,42 +268,42 @@ end
 
 local function antimover()
     local c = lp.Character
-    if c and not c:FindFirstChild("AntiMover") then
-        Instance.new("Folder", c).Name = "AntiMover"
-    end
+    if c and not c:FindFirstChild("AntiMover") then Instance.new("Folder", c).Name = "AntiMover" end
 end
 
 local function v4()
     pcall(function()
-        local bp = lp:FindFirstChild("Backpack");       if not bp then return end
-        local aw = bp:FindFirstChild("Awakening");      if not aw then return end
+        local bp = lp:FindFirstChild("Backpack"); if not bp then return end
+        local aw = bp:FindFirstChild("Awakening"); if not aw then return end
         local rf = aw:FindFirstChild("RemoteFunction"); if not rf then return end
         rf:InvokeServer(true)
     end)
     pcall(function()
         VIM:SendKeyEvent(true,  Enum.KeyCode.T, false, game)
-        task.wait(0.05)
+        task.wait(0.02)
         VIM:SendKeyEvent(false, Enum.KeyCode.T, false, game)
     end)
 end
 
 -- ══════════════════════════════════════════════
---  T-REX ATTACK LOOP
+--  ATAQUE CON T-REX EXCLUSIVO CONTRA JUGADORES
 -- ══════════════════════════════════════════════
 local TRexName = "T-Rex-T-Rex"
 
 function StartAttackLoop()
     if Conns.attack then task.cancel(Conns.attack); Conns.attack = nil end
 
+    -- Forzar clic inicial para activar hitboxes de Roblox
     pcall(function()
         VIM:SendMouseButtonEvent(0, 0, 0, true,  game, 1)
         task.wait(0.02)
         VIM:SendMouseButtonEvent(0, 0, 0, false, game, 1)
     end)
 
+    -- Auto-Equipador de la Fruta T-Rex
     local equipConn = task.spawn(function()
         while AutoBountyEnabled do
-            task.wait(0.05)
+            task.wait(0.1)
             pcall(function()
                 local c = lp.Character; if not c then return end
                 if c:FindFirstChild(TRexName) then return end
@@ -333,23 +315,28 @@ function StartAttackLoop()
         end
     end)
 
+    -- Bucle de clics/remotos directo al jugador objetivo
     Conns.attack = task.spawn(function()
         local moveIndex = 1
         while AutoBountyEnabled do
             task.wait(ATTACK_RATE)
-            if EscapeActive then continue end
-            if not CurrentTarget then continue end
+            if EscapeActive or not CurrentTarget then continue end
+            
             local thisMove = moveIndex
             moveIndex = moveIndex >= 3 and 1 or moveIndex + 1
+            
             pcall(function()
                 local myChar = lp.Character; if not myChar then return end
                 local myHRP  = myChar:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
                 if not CurrentTarget.Parent or not CurrentTarget.Character then return end
+                
                 local tHRP = CurrentTarget.Character:FindFirstChild("HumanoidRootPart"); if not tHRP then return end
                 local tHum = CurrentTarget.Character:FindFirstChild("Humanoid")
                 if not tHum or tHum.Health <= 0 then return end
+                
                 local tool = myChar:FindFirstChild(TRexName); if not tool then return end
                 local remote = tool:FindFirstChild("LeftClickRemote"); if not remote then return end
+                
                 local dir = (tHRP.Position - myHRP.Position).Unit
                 remote:FireServer(Vector3.new(dir.X, dir.Y, dir.Z), thisMove)
             end)
@@ -360,13 +347,12 @@ function StartAttackLoop()
 end
 
 -- ══════════════════════════════════════════════
---  INSTA TELEPORT 
+--  INSTA TELEPORT HACIA EL JUGADOR OBJETIVO
 -- ══════════════════════════════════════════════
 function StartInstaTeleport()
     if Conns.instaTp then Conns.instaTp:Disconnect(); Conns.instaTp = nil end
     Conns.instaTp = RunService.Stepped:Connect(function()
-        if EscapeActive or not AutoBountyEnabled then return end
-        if not CurrentTarget then return end
+        if EscapeActive or not AutoBountyEnabled or not CurrentTarget then return end
         pcall(function()
             local myChar = lp.Character; if not myChar then return end
             if not CurrentTarget.Parent or not CurrentTarget.Character then return end
@@ -380,6 +366,7 @@ function StartInstaTeleport()
             local hist = PositionHistory[name]
             local now  = tick()
             local pos  = tHRP.Position
+            
             table.insert(hist.positions,  pos)
             table.insert(hist.timestamps, now)
             while #hist.positions > PREDICTION_SAMPLES do
@@ -387,6 +374,7 @@ function StartInstaTeleport()
                 table.remove(hist.timestamps, 1)
             end
 
+            -- Cálculo matemático de predicción de movimiento para evitar teletransporte desfasado
             local predicted = pos
             if #hist.positions >= 2 then
                 local totalDisp = Vector3.zero
@@ -402,8 +390,10 @@ function StartInstaTeleport()
                     predicted = pos + ((totalDisp / totalTime) * PREDICTION_TIME)
                 end
             end
+            
             local myChar2 = lp.Character
             if myChar2 then
+                -- Te posiciona exactamente sobre la predicción del jugador objetivo mas el desfase Y Offset
                 myChar2:PivotTo(CFrame.new(predicted) * CFrame.new(0, YOffset, 0))
             end
         end)
@@ -411,7 +401,7 @@ function StartInstaTeleport()
 end
 
 -- ══════════════════════════════════════════════
---  HEALTH ESCAPE
+--  SISTEMA DE ESCAPE DE EMERGENCIA
 -- ══════════════════════════════════════════════
 local function StartEscape()
     if EscapeActive then return end
@@ -422,27 +412,21 @@ local function StartEscape()
         while EscapeActive do
             pcall(function()
                 local c = lp.Character; if not c then return end
-                c:PivotTo(CFrame.new(
-                    c:GetPivot().Position.X,
-                    c:GetPivot().Position.Y + ESCAPE_HEIGHT,
-                    c:GetPivot().Position.Z
-                ))
+                c:PivotTo(CFrame.new(c:GetPivot().Position.X, c:GetPivot().Position.Y + ESCAPE_HEIGHT, c:GetPivot().Position.Z))
             end)
             task.wait(0.05)
             local c = lp.Character
             local h = c and c:FindFirstChild("Humanoid")
             if h and h.Health >= SAFE_HEALTH_THRESHOLD then
                 EscapeActive = false
-                if AutoBountyEnabled then
-                    task.spawn(PickNextTarget)
-                end
+                if AutoBountyEnabled then task.spawn(PickNextTarget) end
             end
         end
     end)
 end
 
 -- ══════════════════════════════════════════════
---  TARGET PICKER / LOOPS
+--  SELECCIÓN SISTEMÁTICA DE JUGADORES
 -- ══════════════════════════════════════════════
 local function DiscardTarget()
     CurrentTarget = nil
@@ -456,38 +440,39 @@ function PickNextTarget()
     DiscardTarget()
 
     local all = Players:GetPlayers()
+    -- Mezclar lista de jugadores de manera aleatoria
     for i = #all, 2, -1 do
         local j = math.random(1, i)
         all[i], all[j] = all[j], all[i]
     end
 
-    local next = nil
+    local nextPlayer = nil
     for _, p in ipairs(all) do
-        if IsPlayerValid(p) then next = p; break end
+        if IsPlayerValid(p) then nextPlayer = p; break end
     end
 
-    if not next then
+    if not nextPlayer then
         if NoTargetSince == nil then NoTargetSince = tick() end
         return
     end
 
     NoTargetSince = nil  
-    CurrentTarget = next
-    PositionHistory[next.Name] = { positions = {}, timestamps = {} }
+    CurrentTarget = nextPlayer
+    PositionHistory[nextPlayer.Name] = { positions = {}, timestamps = {} }
+    
     StartInstaTeleport()
 
     if Conns.watcher then task.cancel(Conns.watcher) end
     Conns.watcher = task.spawn(function()
-        while AutoBountyEnabled and CurrentTarget == next do
-            task.wait(0.25)
-            local gone = not next.Parent  
-            local pvpOff = next:GetAttribute("pvpDisabled") == true
-            local inSafe = IsPlayerInSafeZone(next)
-            local lowLevel = GetPlayerLevel(next) < MIN_PLAYER_LEVEL
-
-            if gone or pvpOff or inSafe or lowLevel then
+        while AutoBountyEnabled and CurrentTarget == nextPlayer do
+            task.wait(0.2)
+            local gone = not nextPlayer.Parent  
+            local pvpOff = nextPlayer:GetAttribute("pvpDisabled") == true
+            local inSafe = IsPlayerInSafeZone(nextPlayer)
+            
+            if gone or pvpOff or inSafe then
                 if Conns.instaTp then Conns.instaTp:Disconnect(); Conns.instaTp = nil end
-                if CurrentTarget == next then
+                if CurrentTarget == nextPlayer then
                     CurrentTarget = nil
                     NoTargetSince = tick()
                     if AutoBountyEnabled then task.spawn(PickNextTarget) end
@@ -520,9 +505,9 @@ local function StartAutoBounty()
     PickNextTarget()
 
     BackupThread = task.spawn(function()
-        task.wait(2)
+        task.wait(1.5)
         while AutoBountyEnabled do
-            task.wait(0.25)
+            task.wait(0.2)
             if IsHealthLow() and not EscapeActive then
                 StartEscape()
                 continue
@@ -530,7 +515,6 @@ local function StartAutoBounty()
             if not CurrentTarget and not EscapeActive then
                 if NoTargetSince and (tick() - NoTargetSince) >= NO_TARGET_HOP_TIME then
                     NoTargetSince = nil
-                    print("[TRex] Sin targets por " .. NO_TARGET_HOP_TIME .. "s → Cambiando de Servidor")
                     task.spawn(Hop)
                 else
                     PickNextTarget()
@@ -544,17 +528,17 @@ local function StartAutoBounty()
 end
 
 -- ══════════════════════════════════════════════
---  SISTEMA FAST ATTACK 
+--  SISTEMA FAST ATTACK EXPLOSIVO
 -- ══════════════════════════════════════════════
 local FastAttackConn = nil
 function StartFastAttack()
     if FastAttackConn then task.cancel(FastAttackConn); FastAttackConn = nil end
-    local Net = ReplicatedStorage:WaitForChild("Modules", 5)
+    local Modules = ReplicatedStorage:WaitForChild("Modules", 5)
+    local Net = Modules and Modules:WaitForChild("Net", 5)
     if not Net then return end
-    Net = Net:WaitForChild("Net", 5)
-    if not Net then return end
-    local RegHit      = Net:FindFirstChild("RE/RegisterHit")
-    local RegAttack   = Net:FindFirstChild("RE/RegisterAttack")
+    
+    local RegHit    = Net:FindFirstChild("RE/RegisterHit")
+    local RegAttack = Net:FindFirstChild("RE/RegisterAttack")
     if not RegHit or not RegAttack then return end
 
     FastAttackConn = task.spawn(function()
@@ -580,36 +564,34 @@ function StartFastAttack()
     end)
 end
 
--- Manejo de reapariciones por muerte
+-- Manejo de reapariciones tras morir
 local function OnCharacterDeath()
     local wasEnabled = AutoBountyEnabled
     StopAll()
     local newChar = lp.CharacterAdded:Wait()
     newChar:WaitForChild("HumanoidRootPart", 10)
     local newHum = newChar:WaitForChild("Humanoid", 10)
-    task.wait(1.5)
+    task.wait(1)
     StartAntiSeat()
     if wasEnabled then StartAutoBounty() end
     if newHum then newHum.Died:Once(OnCharacterDeath) end
 end
 if char:FindFirstChild("Humanoid") then char.Humanoid.Died:Once(OnCharacterDeath) end
 
--- Loops en segundo plano (Buffs constantes)
-task.spawn(function() while task.wait(5) do pcall(BusoKen) end end)
-task.spawn(function() while task.wait(1) do pcall(PvpEnable); pcall(v4); pcall(antimover) end end)
+-- Tareas asíncronas constantes en segundo plano
+task.spawn(function() while task.wait(4) do pcall(BusoKen) end end)
+task.spawn(function() while task.wait(0.5) do pcall(PvpEnable); pcall(v4); pcall(antimover) end end)
 
--- Camera Shaker Bypass
+-- Parcheador para eliminar temblores de cámara molestos
 pcall(function()
     local CS = require(ReplicatedStorage:WaitForChild("Util",12):WaitForChild("CameraShaker",10):WaitForChild("Main",10))
     CS.StartShake = function() end; CS.ShakeOnce = function() end
 end)
 
 -- ══════════════════════════════════════════════
---  CREACIÓN DE INTERFAZ GRÁFICA (UI)
+--  CONSTRUCCIÓN DE LA INTERFAZ GRÁFICA (UI)
 -- ══════════════════════════════════════════════
-pcall(function()
-    local old = CoreGui:FindFirstChild("TommyHub"); if old then old:Destroy() end
-end)
+pcall(function() local old = CoreGui:FindFirstChild("TommyHub"); if old then old:Destroy() end end)
 
 local ScreenGui = Instance.new("ScreenGui", CoreGui)
 ScreenGui.Name = "TommyHub"
@@ -624,32 +606,30 @@ Panel.BorderSizePixel = 0
 Instance.new("UICorner", Panel).CornerRadius = UDim.new(0, 10)
 
 local Stroke = Instance.new("UIStroke", Panel)
-Stroke.Color = Color3.fromRGB(155, 28, 28)
+Stroke.Color = Color3.fromRGB(235, 35, 35)
 Stroke.Thickness = 1.5
 
--- Cabecera / Header de la UI
 local Header = Instance.new("Frame", Panel)
 Header.Size = UDim2.new(1, 0, 0, 38)
-Header.BackgroundColor3 = Color3.fromRGB(145, 25, 25)
+Header.BackgroundColor3 = Color3.fromRGB(185, 25, 25)
 Header.BorderSizePixel = 0
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
 
 local Title = Instance.new("TextLabel", Header)
-Title.Text = "👑 Tommy Hub v7"
+Title.Text = "👑 Tommy Hub v7 | PVP AutoBounty"
 Title.Size = UDim2.new(1, -40, 1, 0)
 Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
+Title.TextSize = 13
 Title.TextXAlignment = Enum.TextXAlignment.Left
 
--- Botón de Minimizar
 local MinBtn = Instance.new("TextButton", Header)
 MinBtn.Text = "─"
 MinBtn.Size = UDim2.new(0, 26, 0, 26)
 MinBtn.Position = UDim2.new(1, -32, 0, 6)
-MinBtn.BackgroundColor3 = Color3.fromRGB(190, 40, 40)
+MinBtn.BackgroundColor3 = Color3.fromRGB(210, 45, 45)
 MinBtn.TextColor3 = Color3.new(1, 1, 1)
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.TextSize = 14
@@ -666,7 +646,6 @@ Layout.Padding = UDim.new(0, 10)
 Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 Layout.VerticalAlignment = Enum.VerticalAlignment.Center
 
--- Función para construir los interruptores (Toggles) de la UI
 local function CreateToggle(text, defaultState, callback)
     local Row = Instance.new("Frame", Container)
     Row.Size = UDim2.new(0, 260, 0, 40)
@@ -679,15 +658,15 @@ local function CreateToggle(text, defaultState, callback)
     Label.Size = UDim2.new(1, -60, 1, 0)
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
-    Label.TextColor3 = Color3.fromRGB(220, 220, 220)
+    Label.TextColor3 = Color3.fromRGB(225, 225, 225)
     Label.Font = Enum.Font.GothamSemibold
-    Label.TextSize = 12
+    Label.TextSize = 11
     Label.TextXAlignment = Enum.TextXAlignment.Left
 
     local Switch = Instance.new("TextButton", Row)
     Switch.Size = UDim2.new(0, 45, 0, 22)
     Switch.Position = UDim2.new(1, -55, 0.5, -11)
-    Switch.BackgroundColor3 = defaultState and Color3.fromRGB(155, 28, 28) or Color3.fromRGB(40, 40, 50)
+    Switch.BackgroundColor3 = defaultState and Color3.fromRGB(215, 35, 35) or Color3.fromRGB(45, 45, 55)
     Switch.Text = ""
     Switch.BorderSizePixel = 0
     Instance.new("UICorner", Switch).CornerRadius = UDim.new(0, 11)
@@ -702,14 +681,16 @@ local function CreateToggle(text, defaultState, callback)
     local state = defaultState
     Switch.MouseButton1Click:Connect(function()
         state = not state
-        Switch.BackgroundColor3 = state and Color3.fromRGB(155, 28, 28) or Color3.fromRGB(40, 40, 50)
+        Switch.BackgroundColor3 = state and Color3.fromRGB(215, 35, 35) or Color3.fromRGB(45, 45, 55)
         Ball:TweenPosition(state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8), "Out", "Quad", 0.15, true)
         callback(state)
     end)
 end
 
--- Crear los Toggles conectados con la funcionalidad real
-CreateToggle("Auto Bounty (T-Rex Click + Insta-TP)", AutoBountyEnabled, function(enabled)
+-- ══════════════════════════════════════════════
+--  INTERRUPTORES DE LA INTERFAZ
+-- ══════════════════════════════════════════════
+CreateToggle("⚔️ Auto Hunt Players (T-Rex Clicks)", AutoBountyEnabled, function(enabled)
     if enabled then
         StartAutoBounty()
     else
@@ -717,7 +698,7 @@ CreateToggle("Auto Bounty (T-Rex Click + Insta-TP)", AutoBountyEnabled, function
     end
 end)
 
-CreateToggle("Fast Attack (Hit Register)", FastAttackEnabled, function(enabled)
+CreateToggle("⚡ Fast Attack (Explosive Hits)", FastAttackEnabled, function(enabled)
     FastAttackEnabled = enabled
     if enabled then
         StartFastAttack()
@@ -726,7 +707,7 @@ CreateToggle("Fast Attack (Hit Register)", FastAttackEnabled, function(enabled)
     end
 end)
 
--- Sistema de minimizado por clicks
+-- Sistema de despliegue/ocultación de UI
 local UI_Open = true
 MinBtn.MouseButton1Click:Connect(function()
     UI_Open = not UI_Open
@@ -734,9 +715,8 @@ MinBtn.MouseButton1Click:Connect(function()
     Panel:TweenSize(UI_Open and UDim2.new(0, 290, 0, 240) or UDim2.new(0, 290, 0, 38), "Out", "Quad", 0.2, true)
 end)
 
--- Hacer que la interfaz se pueda arrastrar (Soporte Móvil/Delta)
+-- Soporte total de Arrastre táctil (Mobile/Delta)
 local dragging, dragInput, dragStart, startPos
-Row = nil -- Limpiar referencias
 Panel.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
