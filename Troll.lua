@@ -3,7 +3,8 @@
 local HttpService = game:GetService("HttpService")
 
 -- 🔗 PON TU WEBHOOK AQUÍ
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1511815823117910270/G94hf0FmHqSiDxPwcnY1wD5ezXgzSJsLmLUCRY9bOHSfXmSeBZSvW0hDVEgY5xUWhhic"
+local WEBHOOK_URL = "https://discord.com/api/webhooks/.
+1511224204131831878FokL37W0mPih4f3Xf47u0Zvc5_bjpf1tsr2wo81oab0FnOLquAhnvhKU7BOAXiOozA5N"
 
 -- ==================== 📩 WEBHOOK ====================
 
