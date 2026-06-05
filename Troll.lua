@@ -1,27 +1,40 @@
 -- =====================================================
+--              ZEROX HUB ULTIMATE (DELTA OPTIMIZED)
+-- =====================================================
+
+--[[
+    ╔══════════════════════════════════════════════════════════════════════╗
+    ║                    🔥 ZEROX HUB ULTIMATE 🔥                          ║
+    ║                         Optimizado para Delta                        ║
+    ║                                                                      ║
+    ║    Funciones:                                                        ║
+    ║    ✓ Auto Bounty (PVP Automático)                                   ║
+    ║    ✓ Fast Attack / Fruit Attack                                     ║
+    ║    ✓ Insta Teleport                                                 ║
+    ║    ✓ Server Hop                                                     ║
+    ║    ✓ ESP (Jugadores, NPCs)                                          ║
+    ║    ✓ Hitbox Expander                                                ║
+    ║    ✓ Anti Seat + Auto V4                                            ║
+    ║    ✓ Interfaz Rayfield Moderna                                      ║
+    ║                                                                      ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+--]]
+
+-- =====================================================
 --              CONFIGURACIÓN DEL USUARIO
 -- =====================================================
 
 local CONFIG = {
-    -- Configuración de equipo
-    Team = "Pirates",  -- "Pirates" o "Marines"
-    
-    -- Configuración de fruta (para Fruit Attack)
-    Fruit = "T-Rex",   -- "T-Rex", "Kitsune", "Dragon", "Empyrean"
-    
-    -- Configuración de PVP
+    Team = "Pirates",
+    Fruit = "T-Rex",
     MinPlayerLevel = 2300,
-    AttackRate = 0.08,      -- Velocidad de ataque (segundos)
-    NoTargetHopTime = 10,   -- Segundos sin target antes de hacer hop
-    PredictionTime = 0.25,  -- Predicción de movimiento
-    YOffset = 1,            -- Altura de teleport
-    
-    -- Configuración de salud
+    AttackRate = 0.08,
+    NoTargetHopTime = 10,
+    PredictionTime = 0.25,
+    YOffset = 1,
     LowHealthThreshold = 5000,
     SafeHealthThreshold = 9000,
-    EscapeHeight = 273861,  -- Altura para escapar
-    
-    -- Configuración de ataque
+    EscapeHeight = 273861,
     FastAttackRange = 12000,
     HitboxSize = 30,
 }
@@ -38,14 +51,13 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
 
 local lp = Players.LocalPlayer
 local isMobile = UserInputService.TouchEnabled
 
 -- Estado del script
 local State = {
-    active = false,           -- Auto Bounty activado
+    active = false,
     currentTarget = nil,
     kills = 0,
     sessionEarned = 0,
@@ -53,16 +65,6 @@ local State = {
     lastHitTime = os.clock(),
     noTargetSince = nil,
     escapeActive = false,
-}
-
--- Estado de visuales
-local ESPState = {
-    enabled = false,
-    objects = {}
-}
-
-local HitboxState = {
-    enabled = false
 }
 
 -- Conexiones
@@ -80,440 +82,6 @@ local _lastHopTime = 0
 local HOP_COOLDOWN = 8
 local _place = game.PlaceId
 local _id = game.JobId
-
--- =====================================================
---              GUI SIMPLE (PC/MÓVIL)
--- =====================================================
-
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "ZeroXHubGUI"
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
--- Verificar si CoreGui está disponible
-local guiParent = (syn and syn.protect_gui) and CoreGui or (gethui and gethui()) or (Cloneref and Cloneref(CoreGui)) or CoreGui
-pcall(function() screenGui.Parent = guiParent end)
-
--- Crear GUI
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 300, 0, 500)
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -250)
-mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-mainFrame.BackgroundTransparency = 0.1
-mainFrame.BorderSize = 0
-mainFrame.Parent = screenGui
-
--- Título
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 40)
-title.Position = UDim2.new(0, 0, 0, 0)
-title.Text = "🔥 ZEROX HUB ULTIMATE"
-title.TextColor3 = Color3.fromRGB(255, 100, 100)
-title.TextSize = 18
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBold
-title.Parent = mainFrame
-
--- Botón toggle para Auto Bounty
-local autoBountyBtn = Instance.new("TextButton")
-autoBountyBtn.Size = UDim2.new(0, 200, 0, 45)
-autoBountyBtn.Position = UDim2.new(0.5, -100, 0, 50)
-autoBountyBtn.Text = "🔴 AUTO BOUNTY: OFF"
-autoBountyBtn.TextColor3 = Color3.new(1, 1, 1)
-autoBountyBtn.TextSize = 14
-autoBountyBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-autoBountyBtn.BorderSize = 0
-autoBountyBtn.Font = Enum.Font.GothamBold
-autoBountyBtn.Parent = mainFrame
-
--- Labels de stats
-local killsLabel = Instance.new("TextLabel")
-killsLabel.Size = UDim2.new(1, -20, 0, 25)
-killsLabel.Position = UDim2.new(0, 10, 0, 110)
-killsLabel.Text = "💀 Kills: 0"
-killsLabel.TextColor3 = Color3.new(1, 1, 1)
-killsLabel.TextSize = 12
-killsLabel.BackgroundTransparency = 1
-killsLabel.TextXAlignment = Enum.TextXAlignment.Left
-killsLabel.Font = Enum.Font.Gotham
-killsLabel.Parent = mainFrame
-
-local bountyLabel = Instance.new("TextLabel")
-bountyLabel.Size = UDim2.new(1, -20, 0, 25)
-bountyLabel.Position = UDim2.new(0, 10, 0, 135)
-bountyLabel.Text = "💰 Bounty ganado: +0"
-bountyLabel.TextColor3 = Color3.new(1, 1, 1)
-bountyLabel.TextSize = 12
-bountyLabel.BackgroundTransparency = 1
-bountyLabel.TextXAlignment = Enum.TextXAlignment.Left
-bountyLabel.Font = Enum.Font.Gotham
-bountyLabel.Parent = mainFrame
-
-local targetLabel = Instance.new("TextLabel")
-targetLabel.Size = UDim2.new(1, -20, 0, 25)
-targetLabel.Position = UDim2.new(0, 10, 0, 160)
-targetLabel.Text = "🎯 Target: ninguno"
-targetLabel.TextColor3 = Color3.new(1, 1, 1)
-targetLabel.TextSize = 12
-targetLabel.BackgroundTransparency = 1
-targetLabel.TextXAlignment = Enum.TextXAlignment.Left
-targetLabel.Font = Enum.Font.Gotham
-targetLabel.Parent = mainFrame
-
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -20, 0, 25)
-statusLabel.Position = UDim2.new(0, 10, 0, 185)
-statusLabel.Text = "📡 Estado: inactivo"
-statusLabel.TextColor3 = Color3.new(1, 1, 1)
-statusLabel.TextSize = 12
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.Parent = mainFrame
-
--- Separador
-local line = Instance.new("Frame")
-line.Size = UDim2.new(0.9, 0, 0, 2)
-line.Position = UDim2.new(0.05, 0, 0, 220)
-line.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-line.BorderSize = 0
-line.Parent = mainFrame
-
--- Botones de fruta
-local fruitLabel = Instance.new("TextLabel")
-fruitLabel.Size = UDim2.new(0.9, 0, 0, 20)
-fruitLabel.Position = UDim2.new(0.05, 0, 0, 235)
-fruitLabel.Text = "🍎 Fruta equipada: " .. CONFIG.Fruit
-fruitLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-fruitLabel.TextSize = 12
-fruitLabel.BackgroundTransparency = 1
-fruitLabel.TextXAlignment = Enum.TextXAlignment.Left
-fruitLabel.Font = Enum.Font.GothamBold
-fruitLabel.Parent = mainFrame
-
-local fruits = {"T-Rex", "Kitsune", "Dragon", "Empyrean"}
-local fruitIndex = 1
-for i, f in ipairs(fruits) do
-    if f == CONFIG.Fruit then fruitIndex = i break end
-end
-
-local prevFruitBtn = Instance.new("TextButton")
-prevFruitBtn.Size = UDim2.new(0, 40, 0, 25)
-prevFruitBtn.Position = UDim2.new(0.1, 0, 0, 260)
-prevFruitBtn.Text = "<"
-prevFruitBtn.TextColor3 = Color3.new(1, 1, 1)
-prevFruitBtn.TextSize = 16
-prevFruitBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-prevFruitBtn.BorderSize = 0
-prevFruitBtn.Font = Enum.Font.GothamBold
-prevFruitBtn.Parent = mainFrame
-
-local nextFruitBtn = Instance.new("TextButton")
-nextFruitBtn.Size = UDim2.new(0, 40, 0, 25)
-nextFruitBtn.Position = UDim2.new(0.7, 0, 0, 260)
-nextFruitBtn.Text = ">"
-nextFruitBtn.TextColor3 = Color3.new(1, 1, 1)
-nextFruitBtn.TextSize = 16
-nextFruitBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-nextFruitBtn.BorderSize = 0
-nextFruitBtn.Font = Enum.Font.GothamBold
-nextFruitBtn.Parent = mainFrame
-
-local currentFruitLabel = Instance.new("TextLabel")
-currentFruitLabel.Size = UDim2.new(0, 100, 0, 25)
-currentFruitLabel.Position = UDim2.new(0.5, -50, 0, 260)
-currentFruitLabel.Text = CONFIG.Fruit
-currentFruitLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-currentFruitLabel.TextSize = 13
-currentFruitLabel.BackgroundTransparency = 1
-currentFruitLabel.Font = Enum.Font.GothamBold
-currentFruitLabel.Parent = mainFrame
-
--- Botón ESP
-local espBtn = Instance.new("TextButton")
-espBtn.Size = UDim2.new(0, 130, 0, 35)
-espBtn.Position = UDim2.new(0.05, 0, 0, 300)
-espBtn.Text = "👁️ ESP: OFF"
-espBtn.TextColor3 = Color3.new(1, 1, 1)
-espBtn.TextSize = 12
-espBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
-espBtn.BorderSize = 0
-espBtn.Font = Enum.Font.GothamBold
-espBtn.Parent = mainFrame
-
--- Botón Hitbox
-local hitboxBtn = Instance.new("TextButton")
-hitboxBtn.Size = UDim2.new(0, 130, 0, 35)
-hitboxBtn.Position = UDim2.new(0.52, 0, 0, 300)
-hitboxBtn.Text = "⚔️ HITBOX: OFF"
-hitboxBtn.TextColor3 = Color3.new(1, 1, 1)
-hitboxBtn.TextSize = 12
-hitboxBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
-hitboxBtn.BorderSize = 0
-hitboxBtn.Font = Enum.Font.GothamBold
-hitboxBtn.Parent = mainFrame
-
--- Slider de velocidad (simulado con botones)
-local speedLabel = Instance.new("TextLabel")
-speedLabel.Size = UDim2.new(0.9, 0, 0, 20)
-speedLabel.Position = UDim2.new(0.05, 0, 0, 350)
-speedLabel.Text = "⚡ Velocidad ataque: " .. string.format("%.2f", CONFIG.AttackRate) .. "s"
-speedLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-speedLabel.TextSize = 11
-speedLabel.BackgroundTransparency = 1
-speedLabel.TextXAlignment = Enum.TextXAlignment.Left
-speedLabel.Font = Enum.Font.Gotham
-speedLabel.Parent = mainFrame
-
-local speedMinus = Instance.new("TextButton")
-speedMinus.Size = UDim2.new(0, 35, 0, 25)
-speedMinus.Position = UDim2.new(0.7, 0, 0, 370)
-speedMinus.Text = "-"
-speedMinus.TextColor3 = Color3.new(1, 1, 1)
-speedMinus.TextSize = 16
-speedMinus.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-speedMinus.BorderSize = 0
-speedMinus.Font = Enum.Font.GothamBold
-speedMinus.Parent = mainFrame
-
-local speedPlus = Instance.new("TextButton")
-speedPlus.Size = UDim2.new(0, 35, 0, 25)
-speedPlus.Position = UDim2.new(0.8, 0, 0, 370)
-speedPlus.Text = "+"
-speedPlus.TextColor3 = Color3.new(1, 1, 1)
-speedPlus.TextSize = 16
-speedPlus.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-speedPlus.BorderSize = 0
-speedPlus.Font = Enum.Font.GothamBold
-speedPlus.Parent = mainFrame
-
--- Botones de teleport (fila 1)
-local teleportSection = Instance.new("TextLabel")
-teleportSection.Size = UDim2.new(0.9, 0, 0, 20)
-teleportSection.Position = UDim2.new(0.05, 0, 0, 410)
-teleportSection.Text = "📍 TELEPORTES RÁPIDOS"
-teleportSection.TextColor3 = Color3.fromRGB(100, 150, 255)
-teleportSection.TextSize = 11
-teleportSection.BackgroundTransparency = 1
-teleportSection.TextXAlignment = Enum.TextXAlignment.Left
-teleportSection.Font = Enum.Font.GothamBold
-teleportSection.Parent = mainFrame
-
-local teleports = {
-    {name = "🏴 Barco Maldito", pos = CFrame.new(923, 126, 32853)},
-    {name = "🧊 Ice Castle", pos = CFrame.new(6148, 294, -6741)},
-    {name = "🏰 Castillo S3", pos = CFrame.new(-5085, 315, -3150)},
-    {name = "🏛️ Mansión", pos = CFrame.new(-12463, 375, -7523)},
-    {name = "🌀 Portal Raid", pos = CFrame.new(-5017, 315, -2823)},
-}
-
-for i, tp in ipairs(teleports) do
-    local btn = Instance.new("TextButton")
-    local row = math.floor((i-1)/2)
-    local col = (i-1)%2
-    btn.Size = UDim2.new(0, 130, 0, 28)
-    btn.Position = UDim2.new(0.05 + (col * 0.47), 0, 0, 435 + (row * 32))
-    btn.Text = tp.name
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.TextSize = 10
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-    btn.BorderSize = 0
-    btn.Font = Enum.Font.Gotham
-    btn.Parent = mainFrame
-    
-    btn.MouseButton1Click:Connect(function()
-        if lp.Character then
-            lp.Character:PivotTo(tp.pos)
-        end
-    end)
-    btn.TouchTap:Connect(function()
-        if lp.Character then
-            lp.Character:PivotTo(tp.pos)
-        end
-    end)
-end
-
--- Botón para mover la GUI (arrastrable)
-local dragBar = Instance.new("TextButton")
-dragBar.Size = UDim2.new(1, 0, 0, 25)
-dragBar.Position = UDim2.new(0, 0, 0, 0)
-dragBar.Text = "⋮⋮  ZEROX HUB  ⋮⋮"
-dragBar.TextColor3 = Color3.fromRGB(255, 255, 255)
-dragBar.TextSize = 12
-dragBar.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-dragBar.BackgroundTransparency = 0.3
-dragBar.BorderSize = 0
-dragBar.Font = Enum.Font.GothamBold
-dragBar.Parent = mainFrame
-
--- Sistema de arrastre
-local dragging = false
-local dragInput, dragStart, startPos
-
-dragBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
-        
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-
-dragBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-
--- =====================================================
---              FUNCIONES DE LA GUI
--- =====================================================
-
--- Actualizar labels de stats
-task.spawn(function()
-    while true do
-        task.wait(0.3)
-        killsLabel.Text = "💀 Kills: " .. State.kills
-        bountyLabel.Text = "💰 Bounty ganado: +" .. State.sessionEarned
-        
-        if State.active then
-            if State.currentTarget then
-                targetLabel.Text = "🎯 Target: " .. State.currentTarget.Name
-                local tHum = State.currentTarget.Character and State.currentTarget.Character:FindFirstChild("Humanoid")
-                if tHum then
-                    statusLabel.Text = "⚔️ Estado: peleando | HP: " .. math.floor(tHum.Health)
-                else
-                    statusLabel.Text = "⚔️ Estado: buscando..."
-                end
-            else
-                targetLabel.Text = "🎯 Target: buscando..."
-                local waitTime = State.noTargetSince and math.floor(CONFIG.NoTargetHopTime - (os.clock() - State.noTargetSince)) or CONFIG.NoTargetHopTime
-                statusLabel.Text = "⏳ Hop en: " .. math.max(0, waitTime) .. "s"
-            end
-        else
-            targetLabel.Text = "🎯 Target: ninguno"
-            statusLabel.Text = "⭕ Estado: inactivo"
-        end
-    end
-end)
-
--- Auto Bounty toggle
-autoBountyBtn.MouseButton1Click:Connect(function()
-    if State.active then
-        StopAutoBounty()
-        autoBountyBtn.Text = "🔴 AUTO BOUNTY: OFF"
-        autoBountyBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-    else
-        StartAutoBounty()
-        autoBountyBtn.Text = "🟢 AUTO BOUNTY: ON"
-        autoBountyBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-    end
-end)
-autoBountyBtn.TouchTap:Connect(function()
-    if State.active then
-        StopAutoBounty()
-        autoBountyBtn.Text = "🔴 AUTO BOUNTY: OFF"
-        autoBountyBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-    else
-        StartAutoBounty()
-        autoBountyBtn.Text = "🟢 AUTO BOUNTY: ON"
-        autoBountyBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-    end
-end)
-
--- Cambio de fruta
-local function updateFruitDisplay()
-    CONFIG.Fruit = fruits[fruitIndex]
-    currentFruitLabel.Text = CONFIG.Fruit
-    fruitLabel.Text = "🍎 Fruta equipada: " .. CONFIG.Fruit
-end
-
-prevFruitBtn.MouseButton1Click:Connect(function()
-    fruitIndex = fruitIndex - 1
-    if fruitIndex < 1 then fruitIndex = #fruits end
-    updateFruitDisplay()
-end)
-prevFruitBtn.TouchTap:Connect(function()
-    fruitIndex = fruitIndex - 1
-    if fruitIndex < 1 then fruitIndex = #fruits end
-    updateFruitDisplay()
-end)
-
-nextFruitBtn.MouseButton1Click:Connect(function()
-    fruitIndex = fruitIndex + 1
-    if fruitIndex > #fruits then fruitIndex = 1 end
-    updateFruitDisplay()
-end)
-nextFruitBtn.TouchTap:Connect(function()
-    fruitIndex = fruitIndex + 1
-    if fruitIndex > #fruits then fruitIndex = 1 end
-    updateFruitDisplay()
-end)
-
--- ESP Toggle
-espBtn.MouseButton1Click:Connect(function()
-    ESPState.enabled = not ESPState.enabled
-    espBtn.Text = ESPState.enabled and "👁️ ESP: ON" or "👁️ ESP: OFF"
-    espBtn.BackgroundColor3 = ESPState.enabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 90)
-    if ESPState.enabled then
-        updateESP()
-    else
-        clearESP()
-    end
-end)
-espBtn.TouchTap:Connect(function()
-    ESPState.enabled = not ESPState.enabled
-    espBtn.Text = ESPState.enabled and "👁️ ESP: ON" or "👁️ ESP: OFF"
-    espBtn.BackgroundColor3 = ESPState.enabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 90)
-    if ESPState.enabled then
-        updateESP()
-    else
-        clearESP()
-    end
-end)
-
--- Hitbox Toggle
-hitboxBtn.MouseButton1Click:Connect(function()
-    HitboxState.enabled = not HitboxState.enabled
-    hitboxBtn.Text = HitboxState.enabled and "⚔️ HITBOX: ON" or "⚔️ HITBOX: OFF"
-    hitboxBtn.BackgroundColor3 = HitboxState.enabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 90)
-end)
-hitboxBtn.TouchTap:Connect(function()
-    HitboxState.enabled = not HitboxState.enabled
-    hitboxBtn.Text = HitboxState.enabled and "⚔️ HITBOX: ON" or "⚔️ HITBOX: OFF"
-    hitboxBtn.BackgroundColor3 = HitboxState.enabled and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 90)
-end)
-
--- Velocidad de ataque
-speedMinus.MouseButton1Click:Connect(function()
-    CONFIG.AttackRate = math.max(0.03, CONFIG.AttackRate - 0.01)
-    speedLabel.Text = "⚡ Velocidad ataque: " .. string.format("%.2f", CONFIG.AttackRate) .. "s"
-end)
-speedMinus.TouchTap:Connect(function()
-    CONFIG.AttackRate = math.max(0.03, CONFIG.AttackRate - 0.01)
-    speedLabel.Text = "⚡ Velocidad ataque: " .. string.format("%.2f", CONFIG.AttackRate) .. "s"
-end)
-
-speedPlus.MouseButton1Click:Connect(function()
-    CONFIG.AttackRate = math.min(0.5, CONFIG.AttackRate + 0.01)
-    speedLabel.Text = "⚡ Velocidad ataque: " .. string.format("%.2f", CONFIG.AttackRate) .. "s"
-end)
-speedPlus.TouchTap:Connect(function()
-    CONFIG.AttackRate = math.min(0.5, CONFIG.AttackRate + 0.01)
-    speedLabel.Text = "⚡ Velocidad ataque: " .. string.format("%.2f", CONFIG.AttackRate) .. "s"
-end)
 
 -- =====================================================
 --              UTILIDADES
@@ -618,13 +186,6 @@ local function V4Awakening()
         task.wait(0.05)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.T, false, game)
     end)
-end
-
-local function AntiMover()
-    local char = lp.Character
-    if char and not char:FindFirstChild("AntiMover") then
-        Instance.new("Folder", char).Name = "AntiMover"
-    end
 end
 
 -- =====================================================
@@ -817,7 +378,8 @@ local function StartEscape()
             State.active = true
             if previousTarget and previousTarget.Parent and previousTarget.Character then
                 State.currentTarget = previousTarget
-            end        end
+            end
+        end
     end)
 end
 
@@ -893,19 +455,19 @@ local function StartAttackLoop()
     end)
     
     Connections.attack = task.spawn(function()
-        local moveIndex = 1
         while State.active do
             task.wait(CONFIG.AttackRate)
             
-            if State.escapeActive then continue end
-            if not State.currentTarget then continue end
+            if State.escapeActive then goto continue end
+            if not State.currentTarget then goto continue end
             
             local target = State.currentTarget
-            if not target.Parent or not target.Character then continue end
+            if not target.Parent or not target.Character then goto continue end
             
             local targetHum = target.Character:FindFirstChild("Humanoid")
-            if not targetHum or targetHum.Health <= 0 then continue end
+            if not targetHum or targetHum.Health <= 0 then goto continue end
             
+            -- Fast Attack
             local enemies = {}
             local myHRP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
             if myHRP then
@@ -923,12 +485,13 @@ local function StartAttackLoop()
                 FastAttackTargets(enemies)
             end
             
+            -- Fruit Attack
             local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
             if targetHRP and myHRP and (targetHRP.Position - myHRP.Position).Magnitude <= 250 then
                 FruitAttack(target)
             end
             
-            moveIndex = moveIndex >= 3 and 1 or moveIndex + 1
+            ::continue::
         end
     end)
 end
@@ -959,7 +522,7 @@ local function StartAutoBounty()
             
             if IsHealthLow() and not State.escapeActive then
                 StartEscape()
-                continue
+                goto continue
             end
             
             if not State.currentTarget and not State.escapeActive then
@@ -975,6 +538,8 @@ local function StartAutoBounty()
             if State.active and not State.escapeActive and Connections.attack == nil then
                 StartAttackLoop()
             end
+            
+            ::continue::
         end
     end)
 end
@@ -1028,10 +593,6 @@ local function OnCharacterDeath()
     
     if wasActive then
         StartAutoBounty()
-        if autoBountyBtn then
-            autoBountyBtn.Text = "🟢 AUTO BOUNTY: ON"
-            autoBountyBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-        end
     end
 end
 
@@ -1060,15 +621,17 @@ task.spawn(function()
         task.wait(1)
         pcall(PvpEnable)
         pcall(V4Awakening)
-        pcall(AntiMover)
     end
 end)
 
 SetupKillDetection()
 
 -- =====================================================
---              ESP (Krazy Hub)
+--              ESP
 -- =====================================================
+
+local espEnabled = false
+local espObjects = {}
 
 local function createESP(target, text, color)
     local head = target:FindFirstChild("Head") or target:FindFirstChild("HumanoidRootPart")
@@ -1091,20 +654,20 @@ local function createESP(target, text, color)
     label.Font = Enum.Font.GothamBold
     label.TextSize = 12
     
-    table.insert(ESPState.objects, bg)
+    table.insert(espObjects, bg)
     return bg
 end
 
 local function clearESP()
-    for _, obj in pairs(ESPState.objects) do
+    for _, obj in pairs(espObjects) do
         pcall(function() obj:Destroy() end)
     end
-    ESPState.objects = {}
+    espObjects = {}
 end
 
 local function updateESP()
     clearESP()
-    if not ESPState.enabled then return end
+    if not espEnabled then return end
     
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= lp and p.Character then
@@ -1127,7 +690,7 @@ end
 task.spawn(function()
     while true do
         task.wait(2)
-        if ESPState.enabled then updateESP() end
+        if espEnabled then updateESP() end
     end
 end)
 
@@ -1135,54 +698,242 @@ end)
 --              HITBOX EXPANDER
 -- =====================================================
 
+local hitboxEnabled = false
 local originalGetWeaponData
 local CombatUtil
 
 pcall(function()
     CombatUtil = require(ReplicatedStorage.Modules.CombatUtil)
     originalGetWeaponData = CombatUtil.GetWeaponData
+    if originalGetWeaponData then
+        hookfunction(CombatUtil.GetWeaponData, newcclosure(function(self, name, ...)
+            local data = originalGetWeaponData(self, name, ...)
+            if hitboxEnabled and type(data) == "table" then
+                return setmetatable({}, {
+                    __index = function(_, k)
+                        return k == "HitboxMagnitude" and 2048 or data[k]
+                    end
+                })
+            end
+            return data
+        end))
+    end
 end)
 
-if originalGetWeaponData then
-    hookfunction(CombatUtil.GetWeaponData, newcclosure(function(self, name, ...)
-        local data = originalGetWeaponData(self, name, ...)
-        if HitboxState.enabled and type(data) == "table" then
-            return setmetatable({}, {
-                __index = function(_, k)
-                    return k == "HitboxMagnitude" and 2048 or data[k]
-                end
-            })
+-- =====================================================
+--              INTERFAZ RAYFIELD
+-- =====================================================
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "🔥 ZEROX HUB ULTIMATE",
+    LoadingTitle = "Cargando ZeroX Hub...",
+    LoadingSubtitle = "Delta Optimized",
+    ConfigurationSaving = {Enabled = false},
+    KeySystem = false,
+})
+
+local MainTab = Window:CreateTab("⚔️ Auto Bounty", 4483362458)
+local CombatTab = Window:CreateTab("💀 Combate", 4483362458)
+local TeleportTab = Window:CreateTab("📍 Teletransportes", 4483362458)
+local VisualTab = Window:CreateTab("👁️ Visuales", 4483362458)
+
+-- ⚔️ TAB AUTO BOUNTY
+MainTab:CreateSection("⚙️ Configuración")
+
+MainTab:CreateToggle({
+    Name = "🔥 AUTO BOUNTY (PVP)",
+    CurrentValue = false,
+    Callback = function(v)
+        if v then
+            StartAutoBounty()
+        else
+            StopAutoBounty()
         end
-        return data
-    end))
-end
+    end,
+})
+
+MainTab:CreateLabel("📊 Estadísticas")
+
+local killsLabel = MainTab:CreateLabel("Kills: 0")
+local bountyLabel = MainTab:CreateLabel("Bounty ganado: +0")
+local targetLabel = MainTab:CreateLabel("Target: ninguno")
+local statusLabel = MainTab:CreateLabel("Estado: inactivo")
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        killsLabel:Set("Kills: " .. State.kills)
+        bountyLabel:Set("Bounty ganado: +" .. State.sessionEarned)
+        
+        if State.active then
+            if State.currentTarget then
+                targetLabel:Set("Target: " .. State.currentTarget.Name)
+                local tHum = State.currentTarget.Character and State.currentTarget.Character:FindFirstChild("Humanoid")
+                if tHum then
+                    statusLabel:Set("Estado: peleando | HP: " .. math.floor(tHum.Health))
+                else
+                    statusLabel:Set("Estado: buscando...")
+                end
+            else
+                targetLabel:Set("Target: buscando...")
+                local waitTime = State.noTargetSince and math.floor(CONFIG.NoTargetHopTime - (os.clock() - State.noTargetSince)) or CONFIG.NoTargetHopTime
+                statusLabel:Set("Hop en: " .. math.max(0, waitTime) .. "s")
+            end
+        else
+            targetLabel:Set("Target: ninguno")
+            statusLabel:Set("Estado: inactivo")
+        end
+    end
+end)
+
+MainTab:CreateSection("⚙️ Ajustes")
+
+MainTab:CreateSlider({
+    Name = "Nivel mínimo de objetivo",
+    Range = {100, 2600},
+    Increment = 50,
+    CurrentValue = CONFIG.MinPlayerLevel,
+    Callback = function(v) CONFIG.MinPlayerLevel = v end,
+})
+
+MainTab:CreateSlider({
+    Name = "Tiempo sin target para Hop (s)",
+    Range = {5, 30},
+    Increment = 1,
+    CurrentValue = CONFIG.NoTargetHopTime,
+    Callback = function(v) CONFIG.NoTargetHopTime = v end,
+})
+
+-- 💀 TAB COMBATE
+CombatTab:CreateSection("🍎 Fruit Attack")
+
+CombatTab:CreateDropdown({
+    Name = "Seleccionar Fruta",
+    Options = {"T-Rex", "Kitsune", "Dragon", "Empyrean"},
+    CurrentOption = CONFIG.Fruit,
+    Callback = function(v) CONFIG.Fruit = v end,
+})
+
+CombatTab:CreateSlider({
+    Name = "Velocidad de ataque (s)",
+    Range = {0.03, 0.5},
+    Increment = 0.01,
+    CurrentValue = CONFIG.AttackRate,
+    Callback = function(v) CONFIG.AttackRate = v end,
+})
+
+CombatTab:CreateSection("⚔️ Hitbox")
+
+CombatTab:CreateToggle({
+    Name = "Hitbox Expander (2048)",
+    CurrentValue = false,
+    Callback = function(v) hitboxEnabled = v end,
+})
+
+CombatTab:CreateSection("🛡️ Salud")
+
+CombatTab:CreateSlider({
+    Name = "Salud para escapar",
+    Range = {1000, 10000},
+    Increment = 100,
+    CurrentValue = CONFIG.LowHealthThreshold,
+    Callback = function(v) CONFIG.LowHealthThreshold = v end,
+})
+
+-- 📍 TAB TELEPORTES
+TeleportTab:CreateSection("🌊 Mar 2")
+
+TeleportTab:CreateButton({
+    Name = "🚢 Barco Maldito",
+    Callback = function()
+        if lp.Character then lp.Character:PivotTo(CFrame.new(923, 126, 32853)) end
+    end,
+})
+
+TeleportTab:CreateButton({
+    Name = "🧊 Ice Castle",
+    Callback = function()
+        if lp.Character then lp.Character:PivotTo(CFrame.new(6148, 294, -6741)) end
+    end,
+})
+
+TeleportTab:CreateSection("🏰 Mar 3")
+
+TeleportTab:CreateButton({
+    Name = "🏰 Castillo (Sea 3)",
+    Callback = function()
+        if lp.Character then lp.Character:PivotTo(CFrame.new(-5085, 315, -3150)) end
+    end,
+})
+
+TeleportTab:CreateButton({
+    Name = "🏛️ Mansión",
+    Callback = function()
+        if lp.Character then lp.Character:PivotTo(CFrame.new(-12463, 375, -7523)) end
+    end,
+})
+
+TeleportTab:CreateButton({
+    Name = "🌀 Portal Raid",
+    Callback = function()
+        if lp.Character then lp.Character:PivotTo(CFrame.new(-5017, 315, -2823)) end
+    end,
+})
+
+TeleportTab:CreateSection("✨ Varios")
+
+TeleportTab:CreateButton({
+    Name = "🪦 Volar al cielo (B)",
+    Callback = function()
+        local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local flag = hrp:FindFirstChild("UpLoop")
+            if flag then flag:Destroy() else
+                flag = Instance.new("BoolValue", hrp)
+                flag.Name = "UpLoop"
+                task.spawn(function()
+                    while flag.Parent do
+                        hrp.CFrame = hrp.CFrame * CFrame.new(0, 273861, 0)
+                        task.wait(0.05)
+                    end
+                end)
+            end
+        end
+    end,
+})
+
+-- 👁️ TAB VISUALES
+VisualTab:CreateSection("ESP")
+
+VisualTab:CreateToggle({
+    Name = "👤 ESP Jugadores",
+    CurrentValue = false,
+    Callback = function(v) espEnabled = v; updateESP() end,
+})
+
+VisualTab:CreateSection("Misc")
+
+VisualTab:CreateButton({
+    Name = "Eliminar TouchInterest (reduce lag)",
+    Callback = function()
+        for _, descendant in pairs(game:GetDescendants()) do
+            if descendant:IsA("TouchTransmitter") then descendant:Destroy() end
+        end
+    end,
+})
 
 -- =====================================================
 --              NOTIFICACIÓN INICIAL
 -- =====================================================
 
-print("✅ ZeroX Hub Ultimate cargado correctamente")
+print("✅ ZeroX Hub Ultimate cargado correctamente (Delta Optimized)")
 print("🔥 By itz_kitsune0588")
-print("🎯 Activa Auto Bounty en el botón rojo")
+print("🎯 Activa Auto Bounty en la pestaña principal")
 
--- Notificación en pantalla
-local notifFrame = Instance.new("Frame")
-notifFrame.Size = UDim2.new(0, 250, 0, 50)
-notifFrame.Position = UDim2.new(0.5, -125, 0.8, 0)
-notifFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-notifFrame.BackgroundTransparency = 0.3
-notifFrame.BorderSize = 0
-notifFrame.Parent = screenGui
-
-local notifText = Instance.new("TextLabel")
-notifText.Size = UDim2.new(1, 0, 1, 0)
-notifText.Text = "✅ ZeroX Hub Ultimate cargado!"
-notifText.TextColor3 = Color3.fromRGB(100, 255, 100)
-notifText.TextSize = 12
-notifText.BackgroundTransparency = 1
-notifText.Font = Enum.Font.GothamBold
-notifText.Parent = notifFrame
-
-task.delay(3, function()
-    notifFrame:Destroy()
-end)
+Rayfield:Notify({
+    Title = "ZeroX Hub Ultimate",
+    Content = "Script cargado correctamente | Delta Optimized",
+    Duration = 3,
+})
